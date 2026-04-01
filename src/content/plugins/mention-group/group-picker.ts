@@ -1,442 +1,259 @@
-import { getPluginConfig, setPluginConfig } from "../../../shared/storage";
-import { insertAtCursor } from "../../../shared/react-input";
+import { getPluginConfig } from "../../../shared/storage";
 
 const PLUGIN_ID = "mention-group";
 const STYLE_ID = "scw-mention-group-style";
-const PICKER_ID = "scw-mention-group-picker";
-const DROPDOWN_CLASS = "scw-mention-group__dropdown";
-const DROPDOWN_ITEM_CLASS = "scw-mention-group__dropdown-item";
-const DROPDOWN_EMPTY_CLASS = "scw-mention-group__dropdown-empty";
-const DROPDOWN_MANAGE_CLASS = "scw-mention-group__dropdown-manage";
-const OVERLAY_CLASS = "scw-mention-group__overlay";
-const MODAL_CLASS = "scw-mention-group__modal";
-const MODAL_TITLE_CLASS = "scw-mention-group__modal-title";
-const GROUP_CARD_CLASS = "scw-mention-group__card";
-const GROUP_HEADER_CLASS = "scw-mention-group__card-header";
-const INPUT_CLASS = "scw-mention-group__input";
-const BTN_CLASS = "scw-mention-group__btn";
-const BTN_PRIMARY_CLASS = "scw-mention-group__btn--primary";
-const BTN_DANGER_CLASS = "scw-mention-group__btn--danger";
-const BTN_ACTIONS_CLASS = "scw-mention-group__btn-actions";
-const MEMBERS_INFO_CLASS = "scw-mention-group__members-info";
-const EDIT_LINK_CLASS = "scw-mention-group__edit-link";
-const EDITOR_CLASS = "scw-mention-group__editor";
-const EDITOR_LABEL_CLASS = "scw-mention-group__editor-label";
-const EDITOR_EMPTY_CLASS = "scw-mention-group__editor-empty";
-const EDITOR_ROW_CLASS = "scw-mention-group__editor-row";
+const BTN_ID = "scw-mention-group-btn";
+const DROPDOWN_ID = "scw-mention-group-dropdown";
+const TOAST_ID = "scw-mention-group-toast";
 
-// ピル型アイコン: 既存拡張のタグ/絵文字と同じトンマナ
-// ドロップダウン・モーダル: ダークモード対応
-const STYLES = `
-  /* ピル: ツールバーに馴染むスタイル */
-  #${PICKER_ID} {
-    align-items: center;
-    cursor: pointer;
-    display: flex;
-    height: 24px;
-    opacity: 0.8;
-    margin: 0 4px;
-    position: relative;
-  }
-  #${PICKER_ID}:hover { opacity: 1; }
+// chrome.storage のキー（元の拡張と互換性を保つ）
+const STORAGE_KEY = "quickMentionGroups";
 
-  #${PICKER_ID} > span {
-    -webkit-user-select: none;
-    user-select: none;
-    align-items: center;
-    border-radius: 2px;
-    color: #ffffff;
-    display: flex;
-    font-family: -apple-system, BlinkMacSystemFont, ".SFNSDisplay-Regular",
-                 "Helvetica Neue", "Hiragino Sans", "ヒラギノ角ゴシック",
-                 Meiryo, "メイリオ", sans-serif;
-    font-size: 12px;
-    line-height: 12px;
-    padding: 2px 4px;
-    background-color: #5c8a8a;
-  }
-
-  .${DROPDOWN_CLASS} {
-    position: absolute;
-    bottom: 100%;
-    left: 0;
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    min-width: 200px;
-    z-index: 10001;
-    overflow: hidden;
-    margin-bottom: 4px;
-  }
-
-  .${DROPDOWN_ITEM_CLASS} {
-    padding: 8px 16px;
-    cursor: pointer;
-    font-size: 13px;
-    border-bottom: 1px solid #f0f0f0;
-  }
-  .${DROPDOWN_ITEM_CLASS}:hover { background: #f0f7ff; }
-
-  .${DROPDOWN_EMPTY_CLASS} { padding: 12px 16px; color: #999; font-size: 13px; }
-
-  .${DROPDOWN_MANAGE_CLASS} {
-    padding: 8px 16px;
-    cursor: pointer;
-    font-size: 12px;
-    color: #4a9eff;
-    text-align: center;
-    background: #fafafa;
-  }
-  .${DROPDOWN_MANAGE_CLASS}:hover { background: #f0f0f0; }
-
-  .${OVERLAY_CLASS} {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.4);
-    z-index: 10002;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .${MODAL_CLASS} {
-    background: white;
-    border-radius: 12px;
-    padding: 24px;
-    width: 480px;
-    max-height: 80vh;
-    overflow-y: auto;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-    color: #333;
-  }
-
-  .${MODAL_TITLE_CLASS} { margin: 0 0 16px; font-size: 18px; }
-
-  .${GROUP_CARD_CLASS} {
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 12px;
-  }
-
-  .${GROUP_HEADER_CLASS} {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-  }
-
-  .${INPUT_CLASS} {
-    flex: 1;
-    padding: 6px 10px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 13px;
-    background: white;
-    color: #333;
-  }
-
-  .${BTN_CLASS} {
-    padding: 8px 16px;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    background: white;
-    color: #666;
-    cursor: pointer;
-    font-size: 13px;
-  }
-  .${BTN_CLASS}:hover { background: #f0f0f0; }
-
-  .${BTN_PRIMARY_CLASS} {
-    border-color: #4a9eff;
-    background: #4a9eff;
-    color: white;
-  }
-  .${BTN_PRIMARY_CLASS}:hover { background: #3a8eef; }
-
-  .${BTN_DANGER_CLASS} {
-    padding: 4px 8px;
-    border-color: #e66;
-    color: #e66;
-    font-size: 12px;
-  }
-  .${BTN_DANGER_CLASS}:hover { background: #fff0f0; }
-
-  .${BTN_ACTIONS_CLASS} {
-    margin-top: 16px;
-    display: flex;
-    gap: 8px;
-  }
-
-  .${MEMBERS_INFO_CLASS} { font-size: 12px; color: #888; margin-bottom: 4px; }
-  .${EDIT_LINK_CLASS} { font-size: 12px; color: #4a9eff; cursor: pointer; }
-  .${EDIT_LINK_CLASS}:hover { text-decoration: underline; }
-
-  .${EDITOR_CLASS} {
-    margin-top: 8px;
-    padding: 8px;
-    border: 1px solid #e0e0e0;
-    border-radius: 6px;
-    max-height: 200px;
-    overflow-y: auto;
-  }
-
-  .${EDITOR_LABEL_CLASS} {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
-    cursor: pointer;
-    font-size: 12px;
-    border-radius: 4px;
-  }
-  .${EDITOR_LABEL_CLASS}:hover { background: #f5f5f5; }
-
-  .${EDITOR_EMPTY_CLASS} { font-size: 12px; color: #999; padding: 8px; }
-  .${EDITOR_ROW_CLASS} { display: flex; gap: 4px; margin-top: 8px; }
-
-  /* ダークモード */
-  body.mainContentArea--dark .${DROPDOWN_CLASS},
-  body[data-theme="dark"] .${DROPDOWN_CLASS},
-  .darkMode .${DROPDOWN_CLASS} {
-    background: #2a2a2a; border-color: #444;
-  }
-  body.mainContentArea--dark .${DROPDOWN_ITEM_CLASS},
-  body[data-theme="dark"] .${DROPDOWN_ITEM_CLASS},
-  .darkMode .${DROPDOWN_ITEM_CLASS} {
-    border-bottom-color: #3a3a3a; color: #ddd;
-  }
-  body.mainContentArea--dark .${DROPDOWN_ITEM_CLASS}:hover,
-  body[data-theme="dark"] .${DROPDOWN_ITEM_CLASS}:hover,
-  .darkMode .${DROPDOWN_ITEM_CLASS}:hover { background: #333; }
-  body.mainContentArea--dark .${DROPDOWN_MANAGE_CLASS},
-  body[data-theme="dark"] .${DROPDOWN_MANAGE_CLASS},
-  .darkMode .${DROPDOWN_MANAGE_CLASS} { background: #333; }
-  body.mainContentArea--dark .${MODAL_CLASS},
-  body[data-theme="dark"] .${MODAL_CLASS},
-  .darkMode .${MODAL_CLASS} { background: #2a2a2a; color: #ddd; }
-  body.mainContentArea--dark .${GROUP_CARD_CLASS},
-  body[data-theme="dark"] .${GROUP_CARD_CLASS},
-  .darkMode .${GROUP_CARD_CLASS} { border-color: #444; }
-  body.mainContentArea--dark .${INPUT_CLASS},
-  body[data-theme="dark"] .${INPUT_CLASS},
-  .darkMode .${INPUT_CLASS} { background: #333; border-color: #555; color: #ddd; }
-  body.mainContentArea--dark .${BTN_CLASS},
-  body[data-theme="dark"] .${BTN_CLASS},
-  .darkMode .${BTN_CLASS} { background: #3a3a3a; border-color: #555; color: #ccc; }
-  body.mainContentArea--dark .${BTN_CLASS}:hover,
-  body[data-theme="dark"] .${BTN_CLASS}:hover,
-  .darkMode .${BTN_CLASS}:hover { background: #4a4a4a; }
-  body.mainContentArea--dark .${BTN_PRIMARY_CLASS},
-  body[data-theme="dark"] .${BTN_PRIMARY_CLASS},
-  .darkMode .${BTN_PRIMARY_CLASS} { background: #3a8eef; border-color: #3a8eef; color: white; }
-  body.mainContentArea--dark .${EDITOR_CLASS},
-  body[data-theme="dark"] .${EDITOR_CLASS},
-  .darkMode .${EDITOR_CLASS} { border-color: #444; }
-  body.mainContentArea--dark .${EDITOR_LABEL_CLASS}:hover,
-  body[data-theme="dark"] .${EDITOR_LABEL_CLASS}:hover,
-  .darkMode .${EDITOR_LABEL_CLASS}:hover { background: #3a3a3a; }
-`;
-
-export interface MemberInfo {
+interface MemberInfo {
   accountId: string;
   name: string;
 }
 
-export interface MentionGroup {
+interface MentionGroup {
   name: string;
   members: MemberInfo[];
 }
 
-interface MentionGroupConfig {
-  groups: MentionGroup[];
+// 元のchatwork-quick-mentionと同じスタイル
+const STYLES = `
+  #${BTN_ID} {
+    display: inline-block;
+    width: 32px;
+    height: 32px;
+    padding: 8px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: currentColor;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: background 0.15s;
+  }
+  #${BTN_ID}:hover {
+    background: rgba(0, 0, 0, 0.08);
+  }
+  #${BTN_ID} svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+  }
+
+  #${DROPDOWN_ID} {
+    position: fixed;
+    z-index: 100000;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+    padding: 6px;
+    min-width: 180px;
+    max-width: 260px;
+    animation: scw-mg-in 0.12s ease-out;
+  }
+  @keyframes scw-mg-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .scw-mg-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 9px 14px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    color: #333;
+    transition: background 0.1s;
+    text-align: left;
+  }
+  .scw-mg-item:hover { background: #e8f0fe; }
+  .scw-mg-item-name { font-weight: 500; }
+  .scw-mg-item-count {
+    font-size: 11px;
+    color: #888;
+    background: #f0f0f0;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+  }
+
+  .scw-mg-empty {
+    padding: 12px 14px 4px;
+    font-size: 12px;
+    color: #999;
+    text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+  }
+  .scw-mg-hint {
+    padding: 2px 14px 12px;
+    font-size: 11px;
+    color: #bbb;
+    text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+  }
+
+  #${TOAST_ID} {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(6px);
+    z-index: 100001;
+    background: #333;
+    color: #fff;
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    opacity: 0;
+    transition: all 0.25s ease;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  #${TOAST_ID}.scw-mg-toast-show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* ダークモード */
+  body.mainContentArea--dark #${DROPDOWN_ID},
+  body[data-theme="dark"] #${DROPDOWN_ID},
+  .darkMode #${DROPDOWN_ID} {
+    background: #2a2a2a;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.08);
+  }
+  body.mainContentArea--dark .scw-mg-item,
+  body[data-theme="dark"] .scw-mg-item,
+  .darkMode .scw-mg-item { color: #ddd; }
+  body.mainContentArea--dark .scw-mg-item:hover,
+  body[data-theme="dark"] .scw-mg-item:hover,
+  .darkMode .scw-mg-item:hover { background: #333; }
+  body.mainContentArea--dark .scw-mg-item-count,
+  body[data-theme="dark"] .scw-mg-item-count,
+  .darkMode .scw-mg-item-count { background: #444; color: #aaa; }
+`;
+
+function buildMentionText(members: MemberInfo[]): string {
+  return members.map((m) => `[To:${m.accountId}]${m.name}さん`).join("\n");
 }
 
-async function getGroups(): Promise<MentionGroup[]> {
-  const config = await getPluginConfig<MentionGroupConfig>(PLUGIN_ID);
-  return config?.groups ?? [];
-}
-
-async function saveGroups(groups: MentionGroup[]): Promise<void> {
-  await setPluginConfig(PLUGIN_ID, { groups });
+function findChatInput(): HTMLTextAreaElement | null {
+  return document.getElementById("_chatText") as HTMLTextAreaElement | null;
 }
 
 function insertMention(members: MemberInfo[]): void {
-  const chatInput = document.querySelector("#_chatText") as HTMLTextAreaElement | null;
-  if (!chatInput) return;
-  const text = members.map((m) => `[To:${m.accountId}]${m.name}さん`).join(" ");
+  const chatInput = findChatInput();
+  if (!chatInput) {
+    showToast("チャット入力欄が見つかりません");
+    return;
+  }
+
+  const mentionText = buildMentionText(members);
+  const currentText = chatInput.value;
+  const start = chatInput.selectionStart || 0;
+  const end = chatInput.selectionEnd || 0;
+  const before = currentText.substring(0, start);
+  const after = currentText.substring(end);
+  const insertText = mentionText + "\n";
+
+  chatInput.value = before + insertText + after;
+  const newPos = start + insertText.length;
+  chatInput.selectionStart = newPos;
+  chatInput.selectionEnd = newPos;
+
+  chatInput.dispatchEvent(new Event("input", { bubbles: true }));
+  chatInput.dispatchEvent(new Event("change", { bubbles: true }));
   chatInput.focus();
-  insertAtCursor(chatInput, text + "\n");
+
+  showToast(`${members.length}人にメンション追加`);
 }
 
-function createDropdown(groups: MentionGroup[]): HTMLElement {
-  const dropdown = document.createElement("div");
-  dropdown.className = DROPDOWN_CLASS;
+function showToast(message: string): void {
+  const existing = document.getElementById(TOAST_ID);
+  if (existing) existing.remove();
 
-  if (groups.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = DROPDOWN_EMPTY_CLASS;
-    empty.textContent = "グループ未登録";
-    dropdown.appendChild(empty);
-  } else {
-    for (const group of groups) {
-      const item = document.createElement("div");
-      item.className = DROPDOWN_ITEM_CLASS;
-      item.textContent = `${group.name} (${group.members.length}人)`;
-      item.addEventListener("click", (e) => {
-        e.stopPropagation();
-        insertMention(group.members);
-        dropdown.remove();
-      });
-      dropdown.appendChild(item);
-    }
-  }
-
-  const manageItem = document.createElement("div");
-  manageItem.className = DROPDOWN_MANAGE_CLASS;
-  manageItem.textContent = "グループを管理...";
-  manageItem.addEventListener("click", (e) => {
-    e.stopPropagation();
-    dropdown.remove();
-    showGroupManager();
-  });
-  dropdown.appendChild(manageItem);
-
-  const closeHandler = (e: MouseEvent) => {
-    if (!dropdown.contains(e.target as Node)) {
-      dropdown.remove();
-      document.removeEventListener("click", closeHandler);
-    }
-  };
-  setTimeout(() => document.addEventListener("click", closeHandler), 0);
-
-  return dropdown;
+  const toast = document.createElement("div");
+  toast.id = TOAST_ID;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add("scw-mg-toast-show"));
+  setTimeout(() => {
+    toast.classList.remove("scw-mg-toast-show");
+    setTimeout(() => toast.remove(), 300);
+  }, 2000);
 }
 
-function getCurrentRoomMembers(): MemberInfo[] {
-  const members: MemberInfo[] = [];
-  // ルームヘッダーのメンバーアイコンから取得
-  // 構造: <div data-aid="12345"><img class="userIconImage" alt="名前"></div>
-  document.querySelectorAll(
-    '#roomMemberArea [data-aid]',
-  ).forEach((el) => {
-    const accountId = el.getAttribute("data-aid");
-    const img = el.querySelector("img.userIconImage");
-    const name = img?.getAttribute("alt") ?? "";
-    if (accountId && name) members.push({ accountId, name });
-  });
-  return members;
+function closeDropdown(): void {
+  const menu = document.getElementById(DROPDOWN_ID);
+  if (menu) menu.remove();
 }
 
-async function showGroupManager(): Promise<void> {
-  const existing = document.querySelector(`.${OVERLAY_CLASS}`);
-  if (existing) { existing.remove(); return; }
+function showGroupDropdown(anchorEl: HTMLElement): void {
+  closeDropdown();
 
-  const groups = await getGroups();
-  const roomMembers = getCurrentRoomMembers();
+  chrome.storage.sync.get(STORAGE_KEY, (data) => {
+    const groups: MentionGroup[] = data[STORAGE_KEY] || [];
 
-  const overlay = document.createElement("div");
-  overlay.className = OVERLAY_CLASS;
-  const modal = document.createElement("div");
-  modal.className = MODAL_CLASS;
+    const menu = document.createElement("div");
+    menu.id = DROPDOWN_ID;
 
-  let editingGroups = JSON.parse(JSON.stringify(groups)) as MentionGroup[];
-
-  function renderModal(): void {
-    modal.innerHTML = `
-      <h2 class="${MODAL_TITLE_CLASS}">メンショングループ管理</h2>
-      <div id="scw-group-list"></div>
-      <div class="${BTN_ACTIONS_CLASS}">
-        <button id="scw-add-group" class="${BTN_CLASS}">+ グループ追加</button>
-        <div style="flex: 1;"></div>
-        <button id="scw-save-groups" class="${BTN_CLASS} ${BTN_PRIMARY_CLASS}">保存</button>
-        <button id="scw-cancel-groups" class="${BTN_CLASS}">キャンセル</button>
-      </div>
-    `;
-    const list = modal.querySelector("#scw-group-list")!;
-
-    for (let i = 0; i < editingGroups.length; i++) {
-      const group = editingGroups[i];
-      const groupEl = document.createElement("div");
-      groupEl.className = GROUP_CARD_CLASS;
-      groupEl.innerHTML = `
-        <div class="${GROUP_HEADER_CLASS}">
-          <input type="text" value="${group.name}" placeholder="グループ名" data-group-index="${i}" class="${INPUT_CLASS}">
-          <button data-delete-group="${i}" class="${BTN_CLASS} ${BTN_DANGER_CLASS}">削除</button>
-        </div>
-        <div class="${MEMBERS_INFO_CLASS}">メンバー: ${group.members.map((m) => m.name).join(", ") || "未設定"}</div>
-        <div class="${EDIT_LINK_CLASS}" data-edit-members="${i}">メンバーを編集...</div>
-      `;
-      groupEl.querySelector<HTMLInputElement>("input")!.addEventListener("input", (ev) => {
-        editingGroups[i].name = (ev.target as HTMLInputElement).value;
-      });
-      groupEl.querySelector(`[data-delete-group="${i}"]`)!.addEventListener("click", () => {
-        editingGroups.splice(i, 1); renderModal();
-      });
-      groupEl.querySelector(`[data-edit-members="${i}"]`)!.addEventListener("click", () => {
-        showMemberEditor(groupEl, i, roomMembers);
-      });
-      list.appendChild(groupEl);
-    }
-
-    modal.querySelector("#scw-add-group")!.addEventListener("click", () => {
-      editingGroups.push({ name: "", members: [] }); renderModal();
-    });
-    modal.querySelector("#scw-save-groups")!.addEventListener("click", async () => {
-      editingGroups = editingGroups.filter((g) => g.name.trim());
-      await saveGroups(editingGroups); overlay.remove();
-    });
-    modal.querySelector("#scw-cancel-groups")!.addEventListener("click", () => overlay.remove());
-  }
-
-  function showMemberEditor(card: Element, groupIndex: number, availableMembers: MemberInfo[]): void {
-    const group = editingGroups[groupIndex];
-    const existing = card.querySelector(`.${EDITOR_CLASS}`);
-    if (existing) { existing.remove(); return; }
-
-    const selectedIds = new Set(group.members.map((m) => m.accountId));
-    const editorEl = document.createElement("div");
-    editorEl.className = EDITOR_CLASS;
-
-    if (availableMembers.length === 0) {
-      editorEl.innerHTML = `
-        <div class="${EDITOR_EMPTY_CLASS}">現在のルームのメンバーが取得できませんでした。<br>手動でアカウントIDを追加できます。</div>
-        <div class="${EDITOR_ROW_CLASS}">
-          <input type="text" placeholder="アカウントID" id="scw-manual-id" class="${INPUT_CLASS}">
-          <input type="text" placeholder="名前" id="scw-manual-name" class="${INPUT_CLASS}">
-          <button id="scw-manual-add" class="${BTN_CLASS}">追加</button>
-        </div>`;
-      editorEl.querySelector("#scw-manual-add")!.addEventListener("click", () => {
-        const idInput = editorEl.querySelector<HTMLInputElement>("#scw-manual-id")!;
-        const nameInput = editorEl.querySelector<HTMLInputElement>("#scw-manual-name")!;
-        if (idInput.value && nameInput.value) {
-          group.members.push({ accountId: idInput.value, name: nameInput.value });
-          renderModal();
-        }
-      });
+    if (groups.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "scw-mg-empty";
+      empty.textContent = "グループ未登録";
+      menu.appendChild(empty);
+      const hint = document.createElement("div");
+      hint.className = "scw-mg-hint";
+      hint.textContent = "拡張機能アイコンから設定してください";
+      menu.appendChild(hint);
     } else {
-      for (const member of availableMembers) {
-        const label = document.createElement("label");
-        label.className = EDITOR_LABEL_CLASS;
-        label.innerHTML = `<input type="checkbox" ${selectedIds.has(member.accountId) ? "checked" : ""} data-account-id="${member.accountId}"><span>${member.name}</span>`;
-        label.querySelector<HTMLInputElement>("input")!.addEventListener("change", (ev) => {
-          if ((ev.target as HTMLInputElement).checked) {
-            group.members.push({ accountId: member.accountId, name: member.name });
-          } else {
-            group.members = group.members.filter((m) => m.accountId !== member.accountId);
-          }
+      for (const group of groups) {
+        const item = document.createElement("button");
+        item.className = "scw-mg-item";
+        item.innerHTML =
+          `<span class="scw-mg-item-name">${group.name}</span>` +
+          `<span class="scw-mg-item-count">${group.members.length}人</span>`;
+        item.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          insertMention(group.members);
+          closeDropdown();
         });
-        editorEl.appendChild(label);
+        menu.appendChild(item);
       }
     }
-    card.appendChild(editorEl);
-  }
 
-  renderModal();
-  overlay.appendChild(modal);
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
-  document.body.appendChild(overlay);
+    document.body.appendChild(menu);
+
+    // 位置計算
+    const btnRect = anchorEl.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    let top = btnRect.bottom + 6;
+    let left = btnRect.left;
+
+    if (top + menuRect.height > window.innerHeight - 8) {
+      top = btnRect.top - menuRect.height - 6;
+    }
+    if (left + menuRect.width > window.innerWidth - 8) {
+      left = window.innerWidth - menuRect.width - 8;
+    }
+
+    menu.style.top = `${top}px`;
+    menu.style.left = `${left}px`;
+
+    setTimeout(() => {
+      document.addEventListener("click", closeDropdown, { once: true });
+    }, 10);
+  });
 }
 
 function injectStyles(): void {
@@ -448,56 +265,53 @@ function injectStyles(): void {
 }
 
 export function injectGroupPicker(): void {
-  if (document.getElementById(PICKER_ID)) return;
+  if (document.getElementById(BTN_ID)) return;
 
-  // Input Toolsの<ul>があればそこに追加、なければアイコン列<ul>の後に独立して配置
-  const targetUl = document.getElementById("scw-input-tools-icons");
-  const emoticon = document.querySelector("#_emoticon");
-  const iconsUl = emoticon?.closest("ul");
+  const toBtn = document.getElementById("_to");
+  const emoticonBtn = document.getElementById("_emoticon");
+  const anchorBtn = toBtn || emoticonBtn;
+  if (!anchorBtn) return;
 
-  if (!targetUl && !iconsUl) return;
+  const anchorWrapper = anchorBtn.closest("._showDescription");
+  if (!anchorWrapper?.parentElement) return;
 
   injectStyles();
 
-  const li = document.createElement("li");
-  li.id = PICKER_ID;
-  li.className = "_showDescription";
-  li.setAttribute("role", "button");
-  li.setAttribute("aria-label", "グループメンション：登録済みグループのメンバーにまとめてTOを付けます");
+  // ChatWorkと同じ構造でラッパーを作る
+  const wrapper = document.createElement("div");
+  wrapper.className = "_showDescription";
+  wrapper.style.display = "block";
 
-  const span = document.createElement("span");
-  span.textContent = "group";
-  li.appendChild(span);
+  const innerDiv = document.createElement("div");
+  innerDiv.style.display = "inline-block";
 
-  li.addEventListener("click", async (e) => {
+  const btn = document.createElement("button");
+  btn.id = BTN_ID;
+  btn.setAttribute("aria-label", "クイックメンション：登録メンバーに一括メンション");
+  btn.innerHTML = `<svg viewBox="0 0 10 10" width="16" height="16" fill="currentColor" aria-hidden="true">
+    <circle cx="3.2" cy="2.5" r="1.5"/>
+    <path d="M0.5 7.5C0.5 5.8 1.7 5 3.2 5s2.7.8 2.7 2.5v.5H0.5z"/>
+    <circle cx="7" cy="2.5" r="1.3"/>
+    <path d="M4.8 7.5C4.8 5.8 5.8 5 7 5s2.2.8 2.2 2.5v.5H4.8z"/>
+  </svg>`;
+
+  btn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    document.querySelectorAll(`.${DROPDOWN_CLASS}`).forEach((el) => el.remove());
-    const groups = await getGroups();
-    const dropdown = createDropdown(groups);
-    li.appendChild(dropdown);
+    showGroupDropdown(btn);
   });
 
-  if (targetUl) {
-    targetUl.appendChild(li);
-  } else if (iconsUl) {
-    // Input Toolsが無い場合、独立した<ul>を作成
-    const ul = document.createElement("ul");
-    ul.style.cssText = "display: flex; align-items: center;";
-    ul.appendChild(li);
-    iconsUl.insertAdjacentElement("afterend", ul);
-  }
+  innerDiv.appendChild(btn);
+  wrapper.appendChild(innerDiv);
+  anchorWrapper.parentElement.insertBefore(wrapper, anchorWrapper.nextSibling);
 }
 
 export function removeGroupPicker(): void {
-  const picker = document.getElementById(PICKER_ID);
-  // 独立<ul>に入っている場合はulごと消す
-  if (picker?.parentElement?.id !== "scw-input-tools-icons") {
-    picker?.parentElement?.remove();
-  } else {
-    picker?.remove();
-  }
-  document.querySelectorAll(`.${DROPDOWN_CLASS}`).forEach((el) => el.remove());
-  document.querySelectorAll(`.${OVERLAY_CLASS}`).forEach((el) => el.remove());
+  // ボタンとそのラッパーを削除
+  const btn = document.getElementById(BTN_ID);
+  const wrapper = btn?.closest("._showDescription");
+  wrapper?.remove();
+  closeDropdown();
+  document.getElementById(TOAST_ID)?.remove();
   document.getElementById(STYLE_ID)?.remove();
 }

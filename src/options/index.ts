@@ -192,6 +192,134 @@ async function createQuickTaskConfig(): Promise<HTMLElement> {
   return section;
 }
 
+// ===== メンショングループ設定（元のpopup.js方式） =====
+const MG_STORAGE_KEY = "quickMentionGroups";
+
+interface MgMember {
+  accountId: string;
+  name: string;
+}
+interface MgGroup {
+  name: string;
+  members: MgMember[];
+}
+
+function parseMgMembers(text: string): MgMember[] {
+  const members: MgMember[] = [];
+  const lines = text.split("\n").filter((l) => l.trim());
+  for (const line of lines) {
+    // 形式1: [To:12345678]田中太郎さん
+    const toMatch = line.match(/\[To:(\d+)\]\s*(.+?)(?:さん)?$/);
+    if (toMatch) {
+      if (!members.some((m) => m.accountId === toMatch[1])) {
+        members.push({ accountId: toMatch[1], name: toMatch[2].trim() });
+      }
+      continue;
+    }
+    // 形式2: 12345678,田中太郎 / 12345678 田中太郎
+    const parts = line.split(/[,\t\s]+/);
+    if (parts.length >= 2 && /^\d+$/.test(parts[0])) {
+      if (!members.some((m) => m.accountId === parts[0])) {
+        members.push({ accountId: parts[0], name: parts.slice(1).join(" ").trim() });
+      }
+    }
+  }
+  return members;
+}
+
+function mgMembersToText(members: MgMember[]): string {
+  return members.map((m) => `${m.accountId} ${m.name}`).join("\n");
+}
+
+async function createMentionGroupConfig(): Promise<HTMLElement> {
+  const section = document.createElement("div");
+  section.className = "plugin-card";
+  section.style.display = "block";
+
+  const data = await chrome.storage.sync.get(MG_STORAGE_KEY);
+  const groups: MgGroup[] = data[MG_STORAGE_KEY] || [];
+
+  section.innerHTML = `
+    <div class="plugin-info">
+      <div class="plugin-name">Mention Group - グループ管理</div>
+      <div class="plugin-description">
+        メンバーを1行ずつ入力（<code>accountId 名前</code> または <code>[To:accountId]名前さん</code> をコピペ）
+      </div>
+      <div id="scw-mg-group-list" style="margin-top: 12px;"></div>
+      <div style="margin-top: 12px; display: flex; gap: 8px;">
+        <button id="scw-mg-add" class="button-config-type" style="cursor: pointer; padding: 6px 12px; border: 1px solid #ddd; border-radius: 6px; background: #f8f8f8;">+ グループ追加</button>
+        <button id="scw-mg-save" class="button-config-type" style="cursor: pointer; padding: 6px 12px; border: none; border-radius: 6px; background: #4a9eff; color: white;">保存</button>
+      </div>
+      <div id="scw-mg-status" style="margin-top: 8px; font-size: 12px;"></div>
+    </div>
+  `;
+
+  const listEl = section.querySelector("#scw-mg-group-list")!;
+
+  function createGroupCard(name = "", membersText = ""): HTMLElement {
+    const card = document.createElement("div");
+    card.style.cssText = "border: 1px solid #eee; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #fafbfc;";
+    card.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <input type="text" class="scw-mg-name api-key-input" placeholder="グループ名（例: 開発チーム）" value="${name}" style="flex: 1;">
+        <button class="scw-mg-delete" style="border: none; background: none; color: #ccc; cursor: pointer; font-size: 18px; padding: 2px 6px;">&times;</button>
+      </div>
+      <textarea class="scw-mg-members api-key-input" placeholder="メンバーを1行ずつ入力&#10;例: 12345678 田中太郎&#10;または [To:12345678]田中太郎さん" style="width: 100%; min-height: 80px; font-family: monospace; font-size: 12px; line-height: 1.6; resize: vertical;">${membersText}</textarea>
+      <div class="scw-mg-count" style="font-size: 11px; color: #888; margin-top: 4px; text-align: right;"></div>
+    `;
+
+    const textarea = card.querySelector<HTMLTextAreaElement>(".scw-mg-members")!;
+    const countEl = card.querySelector(".scw-mg-count")!;
+    const updateCount = () => {
+      const count = parseMgMembers(textarea.value).length;
+      countEl.textContent = count > 0 ? `${count}人` : "";
+    };
+    textarea.addEventListener("input", updateCount);
+    updateCount();
+
+    card.querySelector(".scw-mg-delete")!.addEventListener("click", () => {
+      card.remove();
+    });
+
+    return card;
+  }
+
+  // 既存グループを表示
+  if (groups.length === 0) {
+    listEl.appendChild(createGroupCard());
+  } else {
+    for (const g of groups) {
+      listEl.appendChild(createGroupCard(g.name, mgMembersToText(g.members)));
+    }
+  }
+
+  section.querySelector("#scw-mg-add")!.addEventListener("click", () => {
+    listEl.appendChild(createGroupCard());
+  });
+
+  section.querySelector("#scw-mg-save")!.addEventListener("click", () => {
+    const cards = listEl.querySelectorAll<HTMLElement>("div[style]");
+    const newGroups: MgGroup[] = [];
+    cards.forEach((card) => {
+      const nameInput = card.querySelector<HTMLInputElement>(".scw-mg-name");
+      const textarea = card.querySelector<HTMLTextAreaElement>(".scw-mg-members");
+      if (!nameInput || !textarea) return;
+      const name = nameInput.value.trim();
+      const members = parseMgMembers(textarea.value);
+      if (name && members.length > 0) {
+        newGroups.push({ name, members });
+      }
+    });
+
+    chrome.storage.sync.set({ [MG_STORAGE_KEY]: newGroups }, () => {
+      const total = newGroups.reduce((sum, g) => sum + g.members.length, 0);
+      showStatus(`${newGroups.length}グループ（計${total}人）を保存しました`);
+    });
+  });
+
+  return section;
+}
+
 async function render(): Promise<void> {
   const container = document.getElementById("plugin-list");
   if (!container) return;
@@ -210,6 +338,11 @@ async function render(): Promise<void> {
     if (config.id === "quick-task") {
       const taskConfig = await createQuickTaskConfig();
       container.appendChild(taskConfig);
+    }
+
+    if (config.id === "mention-group") {
+      const mgConfig = await createMentionGroupConfig();
+      container.appendChild(mgConfig);
     }
   }
 }
