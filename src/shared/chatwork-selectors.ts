@@ -5,7 +5,7 @@
 export const CW = {
   TIMELINE: "#_timeLine",
   MESSAGE: "[id^=_messageId]",
-  MESSAGE_ACTION_NAV: ".chatTimeLineMessageArea__messageActionNav",
+  MESSAGE_ACTION_NAV: ".messageActionNav",
   TASK_BUTTON: '[aria-label="タスク"]',
   CHAT_INPUT: "#_chatText",
   CHAT_SEND_BUTTON: "#_sendButton",

@@ -135,6 +135,63 @@ async function createInputToolsConfig(): Promise<HTMLElement> {
   return section;
 }
 
+async function createQuickTaskConfig(): Promise<HTMLElement> {
+  const section = document.createElement("div");
+  section.className = "plugin-card";
+
+  const config = await getPluginConfig<{ mode?: string; myChatId?: string }>(
+    "quick-task",
+  );
+  const currentMode = config?.mode ?? "mychat-url";
+  const currentChatId = config?.myChatId ?? "";
+
+  const modes = [
+    { value: "mychat-url", label: "マイチャットにURLのみ" },
+    { value: "mychat-message", label: "マイチャットにURL+メッセージ" },
+    { value: "here-url", label: "現チャットにURLのみ (担当者=自分)" },
+    { value: "here-message", label: "現チャットにURL+メッセージ (担当者=自分)" },
+  ];
+
+  section.innerHTML = `
+    <div class="plugin-info">
+      <div class="plugin-name">Quick Task - 設定</div>
+      <div class="plugin-description">タスク追加の動作モードとマイチャットID</div>
+      <div style="margin-top: 12px;">
+        <label class="api-key-label">動作モード</label>
+        <select id="scw-task-mode" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; margin-top: 4px;">
+          ${modes.map((m) => `<option value="${m.value}" ${m.value === currentMode ? "selected" : ""}>${m.label}</option>`).join("")}
+        </select>
+      </div>
+      <div style="margin-top: 12px;">
+        <label class="api-key-label">マイチャットのルームID</label>
+        <input type="text" id="scw-task-chatid" class="api-key-input"
+               placeholder="例: 12345678"
+               value="${currentChatId}">
+      </div>
+    </div>
+  `;
+
+  section.querySelector("#scw-task-mode")!.addEventListener("change", async (e) => {
+    const mode = (e.target as HTMLSelectElement).value;
+    const existing = (await getPluginConfig<Record<string, unknown>>("quick-task")) ?? {};
+    await setPluginConfig("quick-task", { ...existing, mode });
+    showStatus("Quick Taskモードを保存しました");
+  });
+
+  const chatIdInput = section.querySelector<HTMLInputElement>("#scw-task-chatid")!;
+  let debounce: ReturnType<typeof setTimeout>;
+  chatIdInput.addEventListener("input", () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(async () => {
+      const existing = (await getPluginConfig<Record<string, unknown>>("quick-task")) ?? {};
+      await setPluginConfig("quick-task", { ...existing, myChatId: chatIdInput.value });
+      showStatus("マイチャットIDを保存しました");
+    }, 500);
+  });
+
+  return section;
+}
+
 async function render(): Promise<void> {
   const container = document.getElementById("plugin-list");
   if (!container) return;
@@ -145,10 +202,14 @@ async function render(): Promise<void> {
     const card = createPluginCard(config, settings[config.id]);
     container.appendChild(card);
 
-    // Input Toolsの後にボタン設定を追加
     if (config.id === "input-tools") {
       const btnConfig = await createInputToolsConfig();
       container.appendChild(btnConfig);
+    }
+
+    if (config.id === "quick-task") {
+      const taskConfig = await createQuickTaskConfig();
+      container.appendChild(taskConfig);
     }
   }
 }
