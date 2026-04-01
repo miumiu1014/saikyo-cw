@@ -1,11 +1,12 @@
 import type { CwPlugin } from "../types";
+import { waitForElement, sleep } from "../../../shared/dom-helpers";
 
 const STYLE_ID = "scw-mute-button-style";
 const BTN_CLASS = "scw-mute-button";
 const BTN_ACTIVE_CLASS = "scw-mute-button--active";
 
 let muteBtn: HTMLButtonElement | null = null;
-let isMuted = false;
+let isBusy = false;
 
 const STYLES = `
   .${BTN_CLASS} {
@@ -28,66 +29,94 @@ const STYLES = `
     transition: background 0.2s;
   }
 
-  .${BTN_CLASS}:hover {
-    background: #5c6678;
-  }
+  .${BTN_CLASS}:hover { background: #5c6678; }
 
-  .${BTN_CLASS}.${BTN_ACTIVE_CLASS} {
-    background: #bf616a;
-  }
+  .${BTN_CLASS}.${BTN_ACTIVE_CLASS} { background: #bf616a; }
+  .${BTN_CLASS}.${BTN_ACTIVE_CLASS}:hover { background: #cf717a; }
 
-  .${BTN_CLASS}.${BTN_ACTIVE_CLASS}:hover {
-    background: #cf717a;
-  }
-
-  /* ダークモード */
   body.mainContentArea--dark .${BTN_CLASS},
   body[data-theme="dark"] .${BTN_CLASS},
   .darkMode .${BTN_CLASS} {
     background: #5c6678;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   }
-
   body.mainContentArea--dark .${BTN_CLASS}:hover,
   body[data-theme="dark"] .${BTN_CLASS}:hover,
-  .darkMode .${BTN_CLASS}:hover {
-    background: #6c768a;
-  }
+  .darkMode .${BTN_CLASS}:hover { background: #6c768a; }
 
   body.mainContentArea--dark .${BTN_CLASS}.${BTN_ACTIVE_CLASS},
   body[data-theme="dark"] .${BTN_CLASS}.${BTN_ACTIVE_CLASS},
-  .darkMode .${BTN_CLASS}.${BTN_ACTIVE_CLASS} {
-    background: #bf616a;
-  }
+  .darkMode .${BTN_CLASS}.${BTN_ACTIVE_CLASS} { background: #bf616a; }
 `;
 
-function toggleMute(): void {
-  isMuted = !isMuted;
-  if (muteBtn) {
-    muteBtn.textContent = isMuted ? "🔇" : "🔔";
-    muteBtn.classList.toggle(BTN_ACTIVE_CLASS, isMuted);
-    muteBtn.title = isMuted ? "Unmute notifications" : "Mute notifications";
-  }
+async function toggleMute(): Promise<void> {
+  if (isBusy) return;
+  isBusy = true;
 
-  const audioElements = document.querySelectorAll("audio");
-  audioElements.forEach((audio) => {
-    audio.muted = isMuted;
-  });
+  try {
+    // 1. 歯車ボタンをクリック
+    const settingsBtn = document.querySelector<HTMLElement>(
+      '[data-testid="room-header_room-settings-button"]',
+    );
+    if (!settingsBtn) throw new Error("設定ボタンが見つかりません");
+    settingsBtn.click();
 
-  if (isMuted) {
-    (window as unknown as Record<string, unknown>).__scw_origNotification =
-      window.Notification;
-    (window.Notification as unknown) = class {
-      constructor() {
-        // 何もしない
+    await sleep(300);
+
+    // 2. メニューから「グループチャットの設定」をクリック
+    const menuItem = await waitForElement(
+      '[data-testid="room-header_room-settings_room-settings-menu"]',
+      3000,
+    );
+    (menuItem as HTMLElement).click();
+
+    await sleep(500);
+
+    // 3. 「ミュート」タブをクリック
+    const tabs = document.querySelectorAll<HTMLButtonElement>(
+      '[role="tab"]',
+    );
+    let muteTab: HTMLButtonElement | null = null;
+    for (const tab of tabs) {
+      if (tab.textContent?.trim() === "ミュート") {
+        muteTab = tab;
+        break;
       }
-    };
-  } else {
-    const orig = (window as unknown as Record<string, unknown>)
-      .__scw_origNotification as typeof Notification | undefined;
-    if (orig) {
-      (window.Notification as unknown) = orig;
     }
+    if (!muteTab) throw new Error("ミュートタブが見つかりません");
+    muteTab.click();
+
+    await sleep(300);
+
+    // 4. ミュートチェックボックスをトグル
+    const muteCheckbox = await waitForElement("#_roomSettingMute", 3000) as HTMLInputElement;
+    muteCheckbox.click();
+
+    await sleep(200);
+
+    // 5. 保存ボタンをクリック
+    const saveBtn = document.querySelector<HTMLElement>(
+      '[data-testid="room-setting-dialog_save-button"]',
+    );
+    if (!saveBtn) throw new Error("保存ボタンが見つかりません");
+    saveBtn.click();
+
+    // ボタンの見た目を更新
+    const nowMuted = muteCheckbox.checked;
+    if (muteBtn) {
+      muteBtn.textContent = nowMuted ? "🔇" : "🔔";
+      muteBtn.classList.toggle(BTN_ACTIVE_CLASS, nowMuted);
+      muteBtn.title = nowMuted ? "ミュート中（クリックで解除）" : "ミュートする";
+    }
+  } catch (err) {
+    console.error("[saikyo-cw] Mute error:", err);
+    // メニューやモーダルが残っていたら閉じる
+    const closeBtn = document.querySelector<HTMLElement>(
+      '.dialogContainer button[aria-label="閉じる"]',
+    );
+    closeBtn?.click();
+  } finally {
+    isBusy = false;
   }
 }
 
@@ -103,19 +132,18 @@ export const muteButtonPlugin: CwPlugin = {
   config: {
     id: "mute-button",
     name: "Mute Button",
-    description: "ワンクリックで通知をミュート",
+    description: "ワンクリックでチャットをミュート",
   },
   init() {
     injectStyles();
     muteBtn = document.createElement("button");
     muteBtn.className = BTN_CLASS;
-    muteBtn.title = "Mute notifications";
+    muteBtn.title = "ミュートする";
     muteBtn.textContent = "🔔";
     muteBtn.addEventListener("click", toggleMute);
     document.body.appendChild(muteBtn);
   },
   destroy() {
-    if (isMuted) toggleMute();
     muteBtn?.remove();
     muteBtn = null;
     document.getElementById(STYLE_ID)?.remove();
