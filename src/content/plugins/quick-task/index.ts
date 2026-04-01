@@ -1,7 +1,7 @@
 import type { CwPlugin } from "../types";
 import { observeDOM } from "../../../shared/mutation-observer";
 import { CW } from "../../../shared/chatwork-selectors";
-import { injectMyTaskButton } from "./task-injector";
+import { injectMyTaskButton, removeStyles } from "./task-injector";
 
 let observer: MutationObserver | null = null;
 
@@ -12,7 +12,6 @@ export const quickTaskPlugin: CwPlugin = {
     description: "メッセージにmy taskボタンを追加",
   },
   init() {
-    // メッセージのアクションナビが表示されたらmy taskボタンを注入
     observer = observeDOM(CW.MESSAGE_ACTION_NAV, (el) => {
       injectMyTaskButton(el);
     });
@@ -20,8 +19,9 @@ export const quickTaskPlugin: CwPlugin = {
   destroy() {
     observer?.disconnect();
     observer = null;
+    removeStyles();
     document
-      .querySelectorAll("[data-scw-mytask]")
+      .querySelectorAll(".scw-quick-task__btn")
       .forEach((el) => el.remove());
   },
 };

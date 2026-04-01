@@ -2,7 +2,82 @@ import type { CwPlugin } from "../types";
 import { observeDOM } from "../../../shared/mutation-observer";
 
 const CONTAINER_CLASS = "scw-reaction-copy";
+const BUTTON_CLASS = "scw-reaction-copy__button";
+const BUTTON_TO_CLASS = "scw-reaction-copy__button--to";
+const STYLE_ID = "scw-reaction-copy-style";
+
 let observer: MutationObserver | null = null;
+
+const STYLES = `
+  .${CONTAINER_CLASS} {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+
+  .${BUTTON_CLASS} {
+    padding: 4px;
+    font-size: 12px;
+    background-color: #eee;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #333;
+  }
+
+  .${BUTTON_CLASS}:hover {
+    background-color: #ddd;
+  }
+
+  .${BUTTON_TO_CLASS} {
+    background-color: #e0f0ff;
+    border-color: #a8d4f0;
+    color: #1a6fa8;
+  }
+
+  .${BUTTON_TO_CLASS}:hover {
+    background-color: #cce4f7;
+  }
+
+  /* ダークモード */
+  body.mainContentArea--dark .${BUTTON_CLASS},
+  body[data-theme="dark"] .${BUTTON_CLASS},
+  .darkMode .${BUTTON_CLASS} {
+    background-color: #3a3a3a;
+    border-color: #555;
+    color: #ddd;
+  }
+
+  body.mainContentArea--dark .${BUTTON_CLASS}:hover,
+  body[data-theme="dark"] .${BUTTON_CLASS}:hover,
+  .darkMode .${BUTTON_CLASS}:hover {
+    background-color: #4a4a4a;
+  }
+
+  body.mainContentArea--dark .${BUTTON_TO_CLASS},
+  body[data-theme="dark"] .${BUTTON_TO_CLASS},
+  .darkMode .${BUTTON_TO_CLASS} {
+    background-color: #1a3a50;
+    border-color: #2a5a7a;
+    color: #8ac4ea;
+  }
+
+  body.mainContentArea--dark .${BUTTON_TO_CLASS}:hover,
+  body[data-theme="dark"] .${BUTTON_TO_CLASS}:hover,
+  .darkMode .${BUTTON_TO_CLASS}:hover {
+    background-color: #224a62;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    body.mainContentArea--dark .${BUTTON_CLASS},
+    body[data-theme="dark"] .${BUTTON_CLASS},
+    .darkMode .${BUTTON_CLASS} {
+      background-color: #3a3a3a;
+      border-color: #555;
+      color: #ddd;
+    }
+  }
+`;
 
 interface ReactionUser {
   name: string;
@@ -15,8 +90,8 @@ function getReactionUsers(reactionList: Element): ReactionUser[] {
   );
   return Array.from(userEls).map((el) => {
     const name = el.textContent?.trim() ?? "";
-    // ユーザー要素またはその親からaccount IDを取得
-    const userItem = el.closest("[data-aid]") ?? el.closest("[data-account-id]");
+    const userItem =
+      el.closest("[data-aid]") ?? el.closest("[data-account-id]");
     const accountId =
       userItem?.getAttribute("data-aid") ??
       userItem?.getAttribute("data-account-id") ??
@@ -26,42 +101,14 @@ function getReactionUsers(reactionList: Element): ReactionUser[] {
   });
 }
 
-function copyWithFeedback(
-  btn: HTMLButtonElement,
-  text: string,
-  label: string,
-): void {
-  navigator.clipboard.writeText(text);
+function copyWithFeedback(btn: HTMLButtonElement, text: string): void {
   const original = btn.textContent;
-  btn.textContent = `${label}済み`;
-  setTimeout(() => {
-    btn.textContent = original;
-  }, 1000);
-}
-
-function createButton(
-  label: string,
-  onClick: () => void,
-): HTMLButtonElement {
-  const btn = document.createElement("button");
-  btn.textContent = label;
-  btn.style.cssText = `
-    padding: 4px 8px;
-    font-size: 12px;
-    background: #eee;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.15s;
-  `;
-  btn.addEventListener("mouseenter", () => {
-    btn.style.background = "#ddd";
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = "コピー済み";
+    setTimeout(() => {
+      btn.textContent = original;
+    }, 1000);
   });
-  btn.addEventListener("mouseleave", () => {
-    btn.style.background = "#eee";
-  });
-  btn.addEventListener("click", onClick);
-  return btn;
 }
 
 function injectButtons(reactionList: Element): void {
@@ -69,47 +116,50 @@ function injectButtons(reactionList: Element): void {
 
   const container = document.createElement("div");
   container.className = CONTAINER_CLASS;
-  container.style.cssText = `
-    display: flex;
-    gap: 4px;
-    margin-bottom: 4px;
-  `;
 
   // 名前コピーボタン
-  const copyBtn = createButton("コピー", () => {
+  const copyBtn = document.createElement("button");
+  copyBtn.className = BUTTON_CLASS;
+  copyBtn.textContent = "コピー";
+  copyBtn.addEventListener("click", () => {
     const users = getReactionUsers(reactionList);
     const text = users
       .map((u) => u.name)
       .filter(Boolean)
       .join("\n");
-    copyWithFeedback(copyBtn, text, "コピー");
+    copyWithFeedback(copyBtn, text);
   });
 
   // TO付きコピーボタン
-  const toBtnEl = createButton("TO付きコピー", () => {
+  const toBtn = document.createElement("button");
+  toBtn.className = `${BUTTON_CLASS} ${BUTTON_TO_CLASS}`;
+  toBtn.textContent = "TO付きコピー";
+  toBtn.addEventListener("click", () => {
     const users = getReactionUsers(reactionList);
     const text = users
       .filter((u) => u.name)
       .map((u) =>
-        u.accountId
-          ? `[To:${u.accountId}]${u.name}さん`
-          : u.name,
+        u.accountId ? `[To:${u.accountId}]${u.name}さん` : u.name,
       )
       .join("\n");
-    copyWithFeedback(toBtnEl, text, "コピー");
-  });
-  toBtnEl.style.background = "#e8f4fd";
-  toBtnEl.style.borderColor = "#b3d9f2";
-  toBtnEl.addEventListener("mouseenter", () => {
-    toBtnEl.style.background = "#d0eafb";
-  });
-  toBtnEl.addEventListener("mouseleave", () => {
-    toBtnEl.style.background = "#e8f4fd";
+    copyWithFeedback(toBtn, text);
   });
 
   container.appendChild(copyBtn);
-  container.appendChild(toBtnEl);
+  container.appendChild(toBtn);
   reactionList.prepend(container);
+}
+
+function injectStyles(): void {
+  if (document.getElementById(STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = STYLE_ID;
+  style.textContent = STYLES;
+  document.head.appendChild(style);
+}
+
+function removeStyles(): void {
+  document.getElementById(STYLE_ID)?.remove();
 }
 
 export const reactionCopyPlugin: CwPlugin = {
@@ -119,6 +169,7 @@ export const reactionCopyPlugin: CwPlugin = {
     description: "リアクションしたユーザー一覧をコピー（TO付きも対応）",
   },
   init() {
+    injectStyles();
     observer = observeDOM("#_reactionUserList", (el) => {
       injectButtons(el);
     });
@@ -126,6 +177,9 @@ export const reactionCopyPlugin: CwPlugin = {
   destroy() {
     observer?.disconnect();
     observer = null;
-    document.querySelectorAll(`.${CONTAINER_CLASS}`).forEach((el) => el.remove());
+    removeStyles();
+    document
+      .querySelectorAll(`.${CONTAINER_CLASS}`)
+      .forEach((el) => el.remove());
   },
 };
