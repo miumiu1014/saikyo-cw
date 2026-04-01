@@ -18,6 +18,7 @@
   },
   "options_page": "src/options/index.html",
   "action": {
+    "default_popup": "src/options/index.html",
     "default_title": "saikyo-cw 設定"
   },
   "icons": {}
