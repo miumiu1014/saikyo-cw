@@ -316,14 +316,15 @@ function createDropdown(groups: MentionGroup[]): HTMLElement {
 
 function getCurrentRoomMembers(): MemberInfo[] {
   const members: MemberInfo[] = [];
+  // ルームヘッダーのメンバーアイコンから取得
+  // 構造: <div data-aid="12345"><img class="userIconImage" alt="名前"></div>
   document.querySelectorAll(
-    '#_memberList li[data-account-id], [data-testid="room-member-list"] li[data-account-id]',
+    '#roomMemberArea [data-aid]',
   ).forEach((el) => {
-    const accountId = el.getAttribute("data-account-id");
-    const name =
-      el.querySelector(".roomMemberListItem__name")?.textContent?.trim() ??
-      el.getAttribute("data-account-name") ?? "";
-    if (accountId) members.push({ accountId, name });
+    const accountId = el.getAttribute("data-aid");
+    const img = el.querySelector("img.userIconImage");
+    const name = img?.getAttribute("alt") ?? "";
+    if (accountId && name) members.push({ accountId, name });
   });
   return members;
 }
