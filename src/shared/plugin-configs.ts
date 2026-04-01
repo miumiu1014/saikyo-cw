@@ -21,4 +21,9 @@ export const PLUGIN_CONFIGS: PluginConfig[] = [
     name: "Mention Group",
     description: "グループメンションをワンクリックで挿入",
   },
+  {
+    id: "reaction-copy",
+    name: "Reaction Copy",
+    description: "リアクションしたユーザー一覧をワンクリックでコピー",
+  },
 ];
