@@ -43,6 +43,23 @@ const STYLES = `
     display: block;
     width: 16px;
     height: 16px;
+    opacity: 0.7;
+  }
+  #${BTN_ID}:hover svg {
+    opacity: 1;
+  }
+
+  /* ダークモードでSVGが見えるように */
+  body.mainContentArea--dark #${BTN_ID},
+  body[data-theme="dark"] #${BTN_ID},
+  .darkMode #${BTN_ID} {
+    color: #ccc;
+  }
+  body.mainContentArea--dark #${BTN_ID}:hover,
+  body[data-theme="dark"] #${BTN_ID}:hover,
+  .darkMode #${BTN_ID}:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
   }
 
   #${DROPDOWN_ID} {
