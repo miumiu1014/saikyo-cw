@@ -65,3 +65,15 @@ export async function setPluginConfig(
 export function storageKeyForPlugin(pluginId: string): string {
   return `${PLUGIN_PREFIX}${pluginId}`;
 }
+
+// ===== 共通 Chatwork APIトークン =====
+const API_TOKEN_KEY = "chatworkApiToken";
+
+export async function getApiToken(): Promise<string> {
+  const data = await chrome.storage.sync.get(API_TOKEN_KEY);
+  return (data[API_TOKEN_KEY] as string) ?? "";
+}
+
+export async function setApiToken(token: string): Promise<void> {
+  await chrome.storage.sync.set({ [API_TOKEN_KEY]: token });
+}

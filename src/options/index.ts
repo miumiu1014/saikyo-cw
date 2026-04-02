@@ -9,6 +9,8 @@ import {
   setPluginEnabled,
   setPluginApiKey,
   setPluginConfig,
+  getApiToken,
+  setApiToken,
   type PluginSettings,
 } from "../shared/storage";
 
@@ -324,9 +326,47 @@ async function createMentionGroupConfig(): Promise<HTMLElement> {
   return section;
 }
 
+async function createApiTokenSection(): Promise<HTMLElement> {
+  const section = document.createElement("div");
+  section.className = "plugin-card";
+
+  const currentToken = await getApiToken();
+
+  section.innerHTML = `
+    <div class="plugin-info">
+      <div class="plugin-name">Chatwork APIトークン</div>
+      <div class="plugin-description">
+        API連携が必要なプラグインで共通利用されます。<br>
+        Chatwork右上メニュー → <strong>サービス連携</strong> → <strong>APIトークン</strong> で取得できます。
+      </div>
+      <div class="plugin-config" style="margin-top: 8px;">
+        <input type="password" id="scw-api-token" class="api-key-input"
+               placeholder="APIトークンを入力"
+               value="${currentToken}">
+      </div>
+    </div>
+  `;
+
+  const input = section.querySelector<HTMLInputElement>("#scw-api-token")!;
+  let debounce: ReturnType<typeof setTimeout>;
+  input.addEventListener("input", () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(async () => {
+      await setApiToken(input.value);
+      showStatus("APIトークンを保存しました");
+    }, 500);
+  });
+
+  return section;
+}
+
 async function render(): Promise<void> {
   const container = document.getElementById("plugin-list");
   if (!container) return;
+
+  // 共通APIトークンセクションを最上部に表示
+  const apiTokenSection = await createApiTokenSection();
+  container.appendChild(apiTokenSection);
 
   const settings = await getPluginSettings();
 

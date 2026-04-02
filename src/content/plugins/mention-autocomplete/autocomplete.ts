@@ -1,11 +1,12 @@
 import { CW } from "../../../shared/chatwork-selectors";
 import { setReactInputValue } from "../../../shared/react-input";
-import { getPluginSetting } from "../../../shared/storage";
+import { getApiToken } from "../../../shared/storage";
 
 let memberCache: Record<string, Member[]> = {};
 let dropdown: HTMLDivElement | null = null;
 let activeTextarea: HTMLTextAreaElement | null = null;
 let styleEl: HTMLStyleElement | null = null;
+let toastEl: HTMLDivElement | null = null;
 
 interface Member {
   account_id: number;
@@ -13,20 +14,33 @@ interface Member {
   avatar_image_url: string;
 }
 
-function getApiToken(): Promise<string> {
-  return getPluginSetting("mention-autocomplete").then(
-    (s) => s?.apiKey ?? "",
-  );
-}
-
 function getRoomId(): string | undefined {
   return location.hash.match(/#!rid(\d+)/)?.[1];
+}
+
+function showApiTokenGuide(): void {
+  if (toastEl) return;
+  toastEl = document.createElement("div");
+  toastEl.id = "cw-mention-toast";
+  toastEl.innerHTML = `
+    <strong>APIトークンが未設定です</strong><br>
+    Chatwork右上メニュー → サービス連携 → APIトークン で取得し、<br>
+    拡張機能の設定画面で入力してください。
+  `;
+  document.body.appendChild(toastEl);
+  setTimeout(() => {
+    toastEl?.remove();
+    toastEl = null;
+  }, 5000);
 }
 
 async function fetchMembers(roomId: string): Promise<Member[]> {
   if (memberCache[roomId]) return memberCache[roomId];
   const token = await getApiToken();
-  if (!token) return [];
+  if (!token) {
+    showApiTokenGuide();
+    return [];
+  }
 
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(
@@ -276,6 +290,26 @@ function injectStyles() {
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    #cw-mention-toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 10001;
+      background: #333;
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.6;
+      box-shadow: 0 4px 12px rgba(0,0,0,.3);
+      animation: cw-toast-fade 5s ease-in-out;
+    }
+    @keyframes cw-toast-fade {
+      0% { opacity: 0; transform: translateY(10px); }
+      10% { opacity: 1; transform: translateY(0); }
+      80% { opacity: 1; }
+      100% { opacity: 0; }
+    }
   `;
   document.head.appendChild(styleEl);
 }
@@ -292,6 +326,8 @@ export function destroyAutocomplete(): void {
   hideDropdown();
   memberCache = {};
   activeTextarea = null;
+  toastEl?.remove();
+  toastEl = null;
   styleEl?.remove();
   styleEl = null;
   document.removeEventListener("input", onInput, true);

@@ -6,8 +6,6 @@ export const mentionAutocompletePlugin: CwPlugin = {
     id: "mention-autocomplete",
     name: "Mention Autocomplete",
     description: "@を入力するとメンバー候補を表示してメンション挿入",
-    requiresApiKey: true,
-    apiKeyLabel: "Chatwork APIトークン",
   },
   init() {
     initAutocomplete();
