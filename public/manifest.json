@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Chatwork拡張機能をまとめたAll-in-one拡張。プラグインごとにOn/Off可能",
   "permissions": ["storage"],
-  "host_permissions": ["https://www.chatwork.com/*"],
+  "host_permissions": ["https://www.chatwork.com/*", "https://api.chatwork.com/*"],
   "content_scripts": [
     {
       "matches": ["https://www.chatwork.com/*"],

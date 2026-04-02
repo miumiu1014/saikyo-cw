@@ -8,6 +8,8 @@ import {
   getPluginConfig,
   setPluginConfig,
   storageKeyForPlugin,
+  getApiToken,
+  setApiToken,
 } from "../shared/storage";
 
 describe("storage", () => {
@@ -110,6 +112,28 @@ describe("storage", () => {
     it("設定が未登録ならundefinedを返す", async () => {
       const config = await getPluginConfig("nonexistent");
       expect(config).toBeUndefined();
+    });
+  });
+
+  describe("getApiToken / setApiToken", () => {
+    it("未設定時は空文字を返す", async () => {
+      const token = await getApiToken();
+      expect(token).toBe("");
+    });
+
+    it("トークンを保存・取得できる", async () => {
+      await setApiToken("test-token-123");
+
+      const token = await getApiToken();
+      expect(token).toBe("test-token-123");
+    });
+
+    it("トークンを上書きできる", async () => {
+      await setApiToken("old-token");
+      await setApiToken("new-token");
+
+      const token = await getApiToken();
+      expect(token).toBe("new-token");
     });
   });
 });

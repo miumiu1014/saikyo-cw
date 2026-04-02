@@ -26,4 +26,9 @@ export const PLUGIN_CONFIGS: PluginConfig[] = [
     name: "Reaction Copy",
     description: "リアクションしたユーザー一覧をワンクリックでコピー",
   },
+  {
+    id: "mention-autocomplete",
+    name: "Mention Autocomplete",
+    description: "@を入力するとメンバー候補を表示してメンション挿入",
+  },
 ];
