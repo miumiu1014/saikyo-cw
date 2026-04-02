@@ -5,6 +5,7 @@ import { muteButtonPlugin } from "./plugins/mute-button";
 import { quickTaskPlugin } from "./plugins/quick-task";
 import { mentionGroupPlugin } from "./plugins/mention-group";
 import { reactionCopyPlugin } from "./plugins/reaction-copy";
+import { mentionAutocompletePlugin } from "./plugins/mention-autocomplete";
 
 const ALL_PLUGINS: CwPlugin[] = [
   inputToolsPlugin,
@@ -12,6 +13,7 @@ const ALL_PLUGINS: CwPlugin[] = [
   quickTaskPlugin,
   mentionGroupPlugin,
   reactionCopyPlugin,
+  mentionAutocompletePlugin,
 ];
 
 const activePlugins = new Map<string, CwPlugin>();
