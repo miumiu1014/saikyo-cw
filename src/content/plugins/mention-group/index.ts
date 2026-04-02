@@ -27,9 +27,7 @@ export const mentionGroupPlugin: CwPlugin = {
     profileObserver = observeDOM(
       '[data-testid="profile-popup_profile-button"]',
       (el) => {
-        // プロフィールボタンの祖先のカード全体を取得
-        const card = el.closest('[data-aid]');
-        if (card) injectAddToGroupButton(card);
+        injectAddToGroupButton(el);
       },
     );
   },

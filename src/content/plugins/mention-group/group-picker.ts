@@ -368,22 +368,28 @@ export function injectGroupPicker(): void {
 }
 
 // プロフィールカードに「グループに追加」ボタンを注入
-export function injectAddToGroupButton(profileCard: Element): void {
-  if (profileCard.querySelector(`.${ADD_BTN_CLASS}`)) return;
-
-  // data-aid からアカウントIDを取得
-  const aidEl = profileCard.querySelector("[data-aid]");
-  const accountId = aidEl?.getAttribute("data-aid");
+export function injectAddToGroupButton(profileBtn: Element): void {
+  // button[data-testid="profile-popup_profile-button"][data-aid="xxx"]
+  const accountId = profileBtn.getAttribute("data-aid");
   if (!accountId) return;
 
+  // プロフィールカード全体を探す (div[data-aid]が本体)
+  // profileBtn → div → div.sc-fjvvzt → div.sc-JrDLc → div[data-aid]
+  const card = profileBtn.closest("div[data-aid]")
+    ?? profileBtn.parentElement?.parentElement?.parentElement?.parentElement;
+  if (!card) return;
+
+  // 既にボタンがあればスキップ
+  if (card.querySelector(`.${ADD_BTN_CLASS}`)) return;
+
   // 名前を取得
-  const nameEl = profileCard.querySelector(`[data-testid="profile-popup_user-name"] span[class*="_nameAid"]`);
+  const nameEl = card.querySelector(`[data-testid="profile-popup_user-name"] span[class*="_nameAid"]`);
   const name = nameEl?.textContent?.trim() ?? "";
   if (!name) return;
 
-  // ボタン配置先: プロフィール/コンタクトボタンがある行
-  const buttonArea = profileCard.querySelector(".sc-fjvvzt, .sc-JrDLc > div:first-child");
-  if (!buttonArea) return;
+  // ボタン配置先: プロフィールボタンの親(div.sc-dtBdUo)の隣に追加
+  const buttonRow = profileBtn.parentElement?.parentElement?.parentElement;
+  if (!buttonRow) return;
 
   injectStyles();
 
@@ -479,7 +485,7 @@ export function injectAddToGroupButton(profileCard: Element): void {
   });
 
   wrapper.appendChild(btn);
-  buttonArea.appendChild(wrapper);
+  buttonRow.appendChild(wrapper);
 }
 
 export function removeGroupPicker(): void {
