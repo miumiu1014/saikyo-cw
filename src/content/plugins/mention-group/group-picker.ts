@@ -303,9 +303,14 @@ function showGroupDropdown(anchorEl: HTMLElement): void {
       for (const group of groups) {
         const item = document.createElement("button");
         item.className = "scw-mg-item";
-        item.innerHTML =
-          `<span class="scw-mg-item-name">${group.name}</span>` +
-          `<span class="scw-mg-item-count">${group.members.length}人</span>`;
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "scw-mg-item-name";
+        nameSpan.textContent = group.name;
+        const countSpan = document.createElement("span");
+        countSpan.className = "scw-mg-item-count";
+        countSpan.textContent = `${group.members.length}人`;
+        item.appendChild(nameSpan);
+        item.appendChild(countSpan);
         item.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();

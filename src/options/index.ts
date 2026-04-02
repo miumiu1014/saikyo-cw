@@ -12,6 +12,10 @@ import {
   type PluginSettings,
 } from "../shared/storage";
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 let statusTimeout: ReturnType<typeof setTimeout> | null = null;
 
 function showStatus(message: string): void {
@@ -261,10 +265,10 @@ async function createMentionGroupConfig(): Promise<HTMLElement> {
     card.style.cssText = "border: 1px solid #eee; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #fafbfc;";
     card.innerHTML = `
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-        <input type="text" class="scw-mg-name api-key-input" placeholder="グループ名（例: 開発チーム）" value="${name}" style="flex: 1;">
+        <input type="text" class="scw-mg-name api-key-input" placeholder="グループ名（例: 開発チーム）" value="${escapeHtml(name)}" style="flex: 1;">
         <button class="scw-mg-delete" style="border: none; background: none; color: #ccc; cursor: pointer; font-size: 18px; padding: 2px 6px;">&times;</button>
       </div>
-      <textarea class="scw-mg-members api-key-input" placeholder="メンバーを1行ずつ入力&#10;例: 12345678 田中太郎&#10;または [To:12345678]田中太郎さん" style="width: 100%; min-height: 80px; font-family: monospace; font-size: 12px; line-height: 1.6; resize: vertical;">${membersText}</textarea>
+      <textarea class="scw-mg-members api-key-input" placeholder="メンバーを1行ずつ入力&#10;例: 12345678 田中太郎&#10;または [To:12345678]田中太郎さん" style="width: 100%; min-height: 80px; font-family: monospace; font-size: 12px; line-height: 1.6; resize: vertical;">${escapeHtml(membersText)}</textarea>
       <div class="scw-mg-count" style="font-size: 11px; color: #888; margin-top: 4px; text-align: right;"></div>
     `;
 
