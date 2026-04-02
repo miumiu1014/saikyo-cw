@@ -3,14 +3,17 @@ import { setReactInputValue } from "../../../shared/react-input";
 import { getApiToken } from "../../../shared/storage";
 
 let memberCache: Record<string, Member[]> = {};
+let myAccountId: string | null = null;
 let dropdown: HTMLDivElement | null = null;
 let activeTextarea: HTMLTextAreaElement | null = null;
 let styleEl: HTMLStyleElement | null = null;
-let toastEl: HTMLDivElement | null = null;
+let multiSelectMode = false;
+const sessionSelected = new Set<string>();
 
 interface Member {
-  account_id: number;
+  account_id: string;
   name: string;
+  chatwork_id?: string;
   avatar_image_url: string;
 }
 
@@ -18,43 +21,29 @@ function getRoomId(): string | undefined {
   return location.hash.match(/#!rid(\d+)/)?.[1];
 }
 
-function showApiTokenGuide(): void {
-  if (toastEl) return;
-  toastEl = document.createElement("div");
-  toastEl.id = "cw-mention-toast";
-  toastEl.innerHTML = `
-    <strong>APIトークンが未設定です</strong><br>
-    Chatwork右上メニュー → サービス連携 → APIトークン で取得し、<br>
-    拡張機能の設定画面で入力してください。
-  `;
-  document.body.appendChild(toastEl);
-  setTimeout(() => {
-    toastEl?.remove();
-    toastEl = null;
-  }, 5000);
-}
-
 async function fetchMembers(roomId: string): Promise<Member[]> {
   if (memberCache[roomId]) return memberCache[roomId];
   const token = await getApiToken();
-  if (!token) {
-    showApiTokenGuide();
-    return [];
-  }
+  if (!token) return [];
 
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage(
-      { type: "fetchMembers", roomId, token },
-      (res) => {
-        if (res?.ok) {
-          memberCache[roomId] = res.members;
-          resolve(res.members);
-        } else {
-          resolve([]);
-        }
-      },
-    );
-  });
+  const [membersRes, meRes] = await Promise.all([
+    chrome.runtime.sendMessage({ type: "fetchMembers", roomId, token }).catch(() => null),
+    myAccountId == null
+      ? chrome.runtime.sendMessage({ type: "fetchMe", token }).catch(() => null)
+      : null,
+  ]);
+
+  if (!membersRes?.ok) return [];
+
+  const members: Member[] = membersRes.members.map(
+    (m: { account_id: number; name: string; chatwork_id?: string; avatar_image_url: string }) => ({
+      ...m,
+      account_id: String(m.account_id),
+    }),
+  );
+  memberCache[roomId] = members;
+  if (meRes?.ok) myAccountId = String(meRes.me.account_id);
+  return members;
 }
 
 function getQuery(textarea: HTMLTextAreaElement): string | null {
@@ -122,14 +111,14 @@ function createMemberItem(
 ): HTMLDivElement {
   const item = document.createElement("div");
   item.className = "cw-mention-item" + (isActive ? " active" : "");
-  item.dataset.accountId = String(member.account_id);
+  item.dataset.accountId = member.account_id;
   item.dataset.name = member.name;
 
   const avatar = document.createElement("img");
   avatar.className = "cw-mention-avatar";
   avatar.src = member.avatar_image_url;
   avatar.onerror = () => {
-    avatar.style.visibility = "hidden";
+    avatar.style.display = "none";
   };
 
   const name = document.createElement("span");
@@ -140,7 +129,7 @@ function createMemberItem(
   item.appendChild(name);
   item.addEventListener("mousedown", (e) => {
     e.preventDefault();
-    insertMention(textarea, member);
+    insertMention(textarea, member, e.shiftKey);
   });
   return item;
 }
@@ -150,11 +139,19 @@ function showDropdown(
   query: string,
   textarea: HTMLTextAreaElement,
 ) {
-  hideDropdown();
-  const filtered = members.filter((m) =>
-    m.name.toLowerCase().includes(query.toLowerCase()),
+  hideDropdown(false);
+  const q = query.toLowerCase();
+  const filtered = members.filter(
+    (m) =>
+      String(m.account_id) !== String(myAccountId) &&
+      !sessionSelected.has(m.account_id) &&
+      (m.name.toLowerCase().includes(q) ||
+        (m.chatwork_id ?? "").toLowerCase().includes(q)),
   );
-  if (filtered.length === 0) return;
+  if (filtered.length === 0) {
+    if (multiSelectMode) resetMultiSelect();
+    return;
+  }
 
   let loaded = 0;
   let loading = false;
@@ -163,12 +160,19 @@ function showDropdown(
   dd.id = "cw-mention-dropdown";
   dropdown = dd;
 
+  // ヒント表示
+  const hint = document.createElement("div");
+  hint.className = "cw-mention-hint";
+  hint.textContent = "Shift+クリック / Shift+Enter で複数選択";
+  dd.appendChild(hint);
+
   function loadMore() {
     if (loading || loaded >= filtered.length) return;
     loading = true;
     const chunk = filtered.slice(loaded, loaded + PAGE_SIZE);
     chunk.forEach((member) => {
-      const isActive = loaded === 0 && dd.children.length === 0;
+      const isActive =
+        loaded === 0 && dd.querySelectorAll(".cw-mention-item").length === 0;
       dd.appendChild(createMemberItem(member, isActive, textarea));
       loaded++;
     });
@@ -199,37 +203,78 @@ function showDropdown(
   dd.style.left = Math.max(4, caretPos.left) + "px";
 }
 
-export function hideDropdown(): void {
+export function hideDropdown(resetAll = true): void {
   dropdown?.remove();
   dropdown = null;
+  if (resetAll) resetMultiSelect();
+}
+
+function resetMultiSelect(): void {
+  multiSelectMode = false;
+  sessionSelected.clear();
 }
 
 function moveActive(dir: number) {
   if (!dropdown) return;
-  const items = [...dropdown.querySelectorAll<HTMLDivElement>(".cw-mention-item")];
+  const items = [
+    ...dropdown.querySelectorAll<HTMLDivElement>(".cw-mention-item"),
+  ];
   const cur = items.findIndex((i) => i.classList.contains("active"));
   items[cur]?.classList.remove("active");
-  items[(cur + dir + items.length) % items.length]?.classList.add("active");
+  const next = items[(cur + dir + items.length) % items.length];
+  next?.classList.add("active");
+  next?.scrollIntoView({ block: "nearest" });
 }
 
 function insertMention(
   textarea: HTMLTextAreaElement,
   member: Pick<Member, "account_id" | "name">,
+  keepOpen = false,
 ) {
   const val = textarea.value;
   const pos = textarea.selectionStart;
   const before = val.slice(0, pos);
   const atIdx = before.lastIndexOf("@");
-  if (atIdx === -1) return;
+  const hasAtQuery = atIdx !== -1 && !/[\s\n]/.test(before.slice(atIdx + 1));
 
-  const mention = `[To:${member.account_id}]${member.name} `;
-  const newVal = val.slice(0, atIdx) + mention + val.slice(pos);
-  const newPos = atIdx + mention.length;
+  const mention = `[To:${member.account_id}]${member.name}\n`;
+  let newVal: string;
+  let newPos: number;
+
+  if (hasAtQuery) {
+    newVal = val.slice(0, atIdx) + mention + val.slice(pos);
+    newPos = atIdx + mention.length;
+  } else {
+    newVal = val.slice(0, pos) + mention + val.slice(pos);
+    newPos = pos + mention.length;
+  }
 
   setReactInputValue(textarea, newVal);
   textarea.setSelectionRange(newPos, newPos);
+
+  sessionSelected.add(member.account_id);
+
+  // input発火前にフラグを確定させる（onInputが正しく判定できるよう）
+  if (keepOpen) {
+    multiSelectMode = true;
+  } else {
+    multiSelectMode = false;
+    sessionSelected.clear();
+  }
+
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
   textarea.focus();
-  hideDropdown();
+
+  if (keepOpen) {
+    const roomId = getRoomId();
+    if (roomId) {
+      fetchMembers(roomId).then((members) =>
+        showDropdown(members, "", textarea),
+      );
+    }
+  } else {
+    hideDropdown();
+  }
 }
 
 async function onInput(e: Event) {
@@ -237,10 +282,19 @@ async function onInput(e: Event) {
   if (ta.id !== CW.CHAT_INPUT.replace("#", "")) return;
   activeTextarea = ta as HTMLTextAreaElement;
   const query = getQuery(activeTextarea);
+
   if (query === null) {
-    hideDropdown();
+    if (!multiSelectMode) {
+      hideDropdown();
+      return;
+    }
+    const roomId = getRoomId();
+    if (!roomId) return;
+    const members = await fetchMembers(roomId);
+    showDropdown(members, "", activeTextarea);
     return;
   }
+
   const roomId = getRoomId();
   if (!roomId) return;
   const members = await fetchMembers(roomId);
@@ -249,7 +303,6 @@ async function onInput(e: Event) {
 
 function onKeydown(e: KeyboardEvent) {
   if (!dropdown) return;
-  // IME変換中のEnterは無視（日本語入力確定と混在させない）
   if (e.isComposing) return;
 
   if (e.key === "ArrowDown") {
@@ -265,13 +318,18 @@ function onKeydown(e: KeyboardEvent) {
     if (active) {
       e.preventDefault();
       e.stopPropagation();
-      insertMention(activeTextarea!, {
-        account_id: Number(active.dataset.accountId),
-        name: active.dataset.name!,
-      });
+      insertMention(
+        activeTextarea!,
+        {
+          account_id: active.dataset.accountId!,
+          name: active.dataset.name!,
+        },
+        e.shiftKey,
+      );
     }
   } else if (e.key === "Escape") {
     hideDropdown();
+    activeTextarea?.focus();
   }
 }
 
@@ -280,6 +338,7 @@ function onClick(e: MouseEvent) {
 }
 
 function onHashChange() {
+  memberCache = {};
   hideDropdown();
 }
 
@@ -288,42 +347,57 @@ function injectStyles() {
   styleEl.textContent = `
     #cw-mention-dropdown {
       position: fixed;
-      z-index: 10000;
+      z-index: 999999;
       background: #fff;
       border: 1px solid #ccc;
-      border-radius: 6px;
-      box-shadow: 0 4px 12px rgba(0,0,0,.15);
-      max-height: 260px;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+      max-height: 300px;
       overflow-y: auto;
       min-width: 200px;
+      padding: 2px 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
     }
     .cw-mention-item {
       display: flex;
       align-items: center;
-      padding: 6px 10px;
+      gap: 8px;
+      padding: 6px 12px;
       cursor: pointer;
+      color: #333;
+      transition: background 0.1s;
     }
     .cw-mention-item:hover,
     .cw-mention-item.active {
-      background: #e8f0fe;
+      background: #f0f0f0;
     }
     .cw-mention-avatar {
       width: 24px;
       height: 24px;
       border-radius: 50%;
-      margin-right: 8px;
+      object-fit: cover;
       flex-shrink: 0;
+      background: #e0e0e0;
     }
     .cw-mention-name {
+      color: #222;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    .cw-mention-hint {
+      padding: 3px 12px;
+      font-size: 11px;
+      color: #aaa;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 1px;
     }
     #cw-mention-toast {
       position: fixed;
       bottom: 20px;
       right: 20px;
-      z-index: 10001;
+      z-index: 1000000;
       background: #333;
       color: #fff;
       padding: 12px 16px;
@@ -354,9 +428,8 @@ export function initAutocomplete(): void {
 export function destroyAutocomplete(): void {
   hideDropdown();
   memberCache = {};
+  myAccountId = null;
   activeTextarea = null;
-  toastEl?.remove();
-  toastEl = null;
   styleEl?.remove();
   styleEl = null;
   document.removeEventListener("input", onInput, true);
