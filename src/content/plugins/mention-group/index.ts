@@ -1,7 +1,9 @@
 import type { CwPlugin } from "../types";
-import { injectGroupPicker, removeGroupPicker } from "./group-picker";
+import { observeDOM } from "../../../shared/mutation-observer";
+import { injectGroupPicker, injectAddToGroupButton, removeGroupPicker } from "./group-picker";
 
-let observer: MutationObserver | null = null;
+let toolbarObserver: MutationObserver | null = null;
+let profileObserver: MutationObserver | null = null;
 
 export const mentionGroupPlugin: CwPlugin = {
   config: {
@@ -10,25 +12,32 @@ export const mentionGroupPlugin: CwPlugin = {
     description: "グループメンションをワンクリックで挿入",
   },
   init() {
-    // TOボタンまたは絵文字ボタンが現れたらその横にボタンを注入
-    const tryInject = () => {
-      injectGroupPicker();
-    };
-
-    observer = new MutationObserver(() => {
+    // ツールバーにクイックメンションボタンを注入
+    toolbarObserver = new MutationObserver(() => {
       if (!document.getElementById("scw-mention-group-btn")) {
-        tryInject();
+        injectGroupPicker();
       }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    toolbarObserver.observe(document.body, { childList: true, subtree: true });
+    injectGroupPicker();
+    setTimeout(injectGroupPicker, 1000);
+    setTimeout(injectGroupPicker, 3000);
 
-    tryInject();
-    setTimeout(tryInject, 1000);
-    setTimeout(tryInject, 3000);
+    // プロフィールカードに「グループに追加」ボタンを注入
+    profileObserver = observeDOM(
+      '[data-testid="profile-popup_profile-button"]',
+      (el) => {
+        // プロフィールボタンの祖先のカード全体を取得
+        const card = el.closest('[data-aid]');
+        if (card) injectAddToGroupButton(card);
+      },
+    );
   },
   destroy() {
-    observer?.disconnect();
-    observer = null;
+    toolbarObserver?.disconnect();
+    toolbarObserver = null;
+    profileObserver?.disconnect();
+    profileObserver = null;
     removeGroupPicker();
   },
 };

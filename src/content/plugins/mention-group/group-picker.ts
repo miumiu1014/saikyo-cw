@@ -8,6 +8,8 @@ const TOAST_ID = "scw-mention-group-toast";
 
 // chrome.storage のキー（元の拡張と互換性を保つ）
 const STORAGE_KEY = "quickMentionGroups";
+const ADD_BTN_CLASS = "scw-mg-add-to-group";
+const ADD_DROPDOWN_CLASS = "scw-mg-add-dropdown";
 
 interface MemberInfo {
   accountId: string;
@@ -140,6 +142,65 @@ const STYLES = `
   body.mainContentArea--dark .scw-mg-item-count,
   body[data-theme="dark"] .scw-mg-item-count,
   .darkMode .scw-mg-item-count { background: #444; color: #aaa; }
+
+  /* プロフィールカード「グループに追加」ボタン */
+  .${ADD_BTN_CLASS} {
+    padding: 6px 12px;
+    border: 1px solid #4a90d9;
+    border-radius: 6px;
+    background: #4a90d9;
+    color: white;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    transition: background 0.15s;
+    position: relative;
+  }
+  .${ADD_BTN_CLASS}:hover { background: #357abd; }
+
+  .${ADD_DROPDOWN_CLASS} {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    z-index: 100002;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    padding: 4px;
+    min-width: 160px;
+    margin-bottom: 4px;
+    animation: scw-mg-in 0.12s ease-out;
+  }
+  .${ADD_DROPDOWN_CLASS} button {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+    font-size: 12px;
+    text-align: left;
+    color: #333;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+  }
+  .${ADD_DROPDOWN_CLASS} button:hover { background: #e8f0fe; }
+  .${ADD_DROPDOWN_CLASS} .scw-mg-add-new {
+    color: #4a90d9;
+    border-top: 1px solid #eee;
+    margin-top: 2px;
+    padding-top: 8px;
+  }
+
+  body.mainContentArea--dark .${ADD_DROPDOWN_CLASS},
+  body[data-theme="dark"] .${ADD_DROPDOWN_CLASS},
+  .darkMode .${ADD_DROPDOWN_CLASS} { background: #2a2a2a; }
+  body.mainContentArea--dark .${ADD_DROPDOWN_CLASS} button,
+  body[data-theme="dark"] .${ADD_DROPDOWN_CLASS} button,
+  .darkMode .${ADD_DROPDOWN_CLASS} button { color: #ddd; }
+  body.mainContentArea--dark .${ADD_DROPDOWN_CLASS} button:hover,
+  body[data-theme="dark"] .${ADD_DROPDOWN_CLASS} button:hover,
+  .darkMode .${ADD_DROPDOWN_CLASS} button:hover { background: #333; }
 `;
 
 function buildMentionText(members: MemberInfo[]): string {
@@ -304,6 +365,121 @@ export function injectGroupPicker(): void {
   innerDiv.appendChild(btn);
   wrapper.appendChild(innerDiv);
   anchorWrapper.parentElement.insertBefore(wrapper, anchorWrapper.nextSibling);
+}
+
+// プロフィールカードに「グループに追加」ボタンを注入
+export function injectAddToGroupButton(profileCard: Element): void {
+  if (profileCard.querySelector(`.${ADD_BTN_CLASS}`)) return;
+
+  // data-aid からアカウントIDを取得
+  const aidEl = profileCard.querySelector("[data-aid]");
+  const accountId = aidEl?.getAttribute("data-aid");
+  if (!accountId) return;
+
+  // 名前を取得
+  const nameEl = profileCard.querySelector(`[data-testid="profile-popup_user-name"] span[class*="_nameAid"]`);
+  const name = nameEl?.textContent?.trim() ?? "";
+  if (!name) return;
+
+  // ボタン配置先: プロフィール/コンタクトボタンがある行
+  const buttonArea = profileCard.querySelector(".sc-fjvvzt, .sc-JrDLc > div:first-child");
+  if (!buttonArea) return;
+
+  injectStyles();
+
+  const wrapper = document.createElement("div");
+  wrapper.style.cssText = "display: inline-block; position: relative;";
+
+  const btn = document.createElement("button");
+  btn.className = ADD_BTN_CLASS;
+  btn.textContent = "グループに追加";
+
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // 既存ドロップダウンを閉じる
+    document.querySelectorAll(`.${ADD_DROPDOWN_CLASS}`).forEach((el) => el.remove());
+
+    chrome.storage.sync.get(STORAGE_KEY, (data) => {
+      const groups: MentionGroup[] = data[STORAGE_KEY] || [];
+
+      const dropdown = document.createElement("div");
+      dropdown.className = ADD_DROPDOWN_CLASS;
+
+      if (groups.length === 0) {
+        const empty = document.createElement("button");
+        empty.className = "scw-mg-add-new";
+        empty.textContent = "新規グループを作成";
+        empty.addEventListener("click", () => {
+          // 新規グループを作ってメンバーを追加
+          const groupName = prompt("グループ名を入力");
+          if (!groupName) return;
+          const newGroup: MentionGroup = {
+            name: groupName,
+            members: [{ accountId, name }],
+          };
+          chrome.storage.sync.set({ [STORAGE_KEY]: [newGroup] }, () => {
+            showToast(`「${groupName}」に ${name} を追加しました`);
+            dropdown.remove();
+          });
+        });
+        dropdown.appendChild(empty);
+      } else {
+        for (const group of groups) {
+          const already = group.members.some((m) => m.accountId === accountId);
+          const item = document.createElement("button");
+          item.textContent = already ? `${group.name} (追加済み)` : group.name;
+          if (already) {
+            item.style.color = "#999";
+            item.style.cursor = "default";
+          }
+          item.addEventListener("click", () => {
+            if (already) return;
+            group.members.push({ accountId, name });
+            chrome.storage.sync.set({ [STORAGE_KEY]: groups }, () => {
+              showToast(`「${group.name}」に ${name} を追加しました`);
+              dropdown.remove();
+            });
+          });
+          dropdown.appendChild(item);
+        }
+
+        // 新規グループ追加
+        const addNew = document.createElement("button");
+        addNew.className = "scw-mg-add-new";
+        addNew.textContent = "+ 新規グループに追加";
+        addNew.addEventListener("click", () => {
+          const groupName = prompt("グループ名を入力");
+          if (!groupName) return;
+          groups.push({
+            name: groupName,
+            members: [{ accountId, name }],
+          });
+          chrome.storage.sync.set({ [STORAGE_KEY]: groups }, () => {
+            showToast(`「${groupName}」に ${name} を追加しました`);
+            dropdown.remove();
+          });
+        });
+        dropdown.appendChild(addNew);
+      }
+
+      wrapper.appendChild(dropdown);
+
+      setTimeout(() => {
+        const handler = (ev: MouseEvent) => {
+          if (!dropdown.contains(ev.target as Node) && ev.target !== btn) {
+            dropdown.remove();
+            document.removeEventListener("click", handler);
+          }
+        };
+        document.addEventListener("click", handler);
+      }, 10);
+    });
+  });
+
+  wrapper.appendChild(btn);
+  buttonArea.appendChild(wrapper);
 }
 
 export function removeGroupPicker(): void {
