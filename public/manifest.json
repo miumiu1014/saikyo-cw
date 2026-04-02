@@ -3,7 +3,7 @@
   "name": "ぼくたちがかんがえた最強のチャトワ",
   "version": "0.1.0",
   "description": "Chatwork拡張機能をまとめたAll-in-one拡張。プラグインごとにOn/Off可能",
-  "permissions": ["storage", "activeTab"],
+  "permissions": ["storage"],
   "host_permissions": ["https://www.chatwork.com/*"],
   "content_scripts": [
     {
