@@ -11,7 +11,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         headers: { "X-ChatWorkToken": message.token },
       },
     )
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        return res.json();
+      })
       .then((members) => sendResponse({ ok: true, members }))
       .catch(() => sendResponse({ ok: false }));
     return true; // 非同期レスポンスのためtrueを返す
