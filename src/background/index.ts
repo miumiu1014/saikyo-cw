@@ -2,14 +2,14 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log("saikyo-cw installed");
 });
 
-// メンションオートコンプリート: ルームメンバー取得
+// Chatwork API プロキシ
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  const { token } = message;
+
   if (message.type === "fetchMembers") {
     fetch(
       `https://api.chatwork.com/v2/rooms/${message.roomId}/members`,
-      {
-        headers: { "X-ChatWorkToken": message.token },
-      },
+      { headers: { "X-ChatWorkToken": token } },
     )
       .then((res) => {
         if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -17,6 +17,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       })
       .then((members) => sendResponse({ ok: true, members }))
       .catch(() => sendResponse({ ok: false }));
-    return true; // 非同期レスポンスのためtrueを返す
+    return true;
+  }
+
+  if (message.type === "fetchMe") {
+    fetch("https://api.chatwork.com/v2/me", {
+      headers: { "X-ChatWorkToken": token },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        return res.json();
+      })
+      .then((me) => sendResponse({ ok: true, me }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
   }
 });
