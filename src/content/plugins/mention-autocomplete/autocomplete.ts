@@ -1,6 +1,7 @@
 import { CW } from "../../../shared/chatwork-selectors";
 import { setReactInputValue } from "../../../shared/react-input";
 import { getApiToken } from "../../../shared/storage";
+import { fetchMembersFromDOM } from "./dom-members";
 
 let memberCache: Record<string, Member[]> = {};
 let myAccountId: string | null = null;
@@ -23,29 +24,60 @@ function getRoomId(): string | undefined {
   return location.hash.match(/#!rid(\d+)/)?.[1];
 }
 
+/**
+ * メンバー一覧を取得する。
+ *
+ * 優先順:
+ * 1. キャッシュ
+ * 2. APIトークンがあれば Chatwork API（全メンバー取得可能）
+ * 3. DOM から取得（APIトークン不要・メンバーパネルやタイムラインから収集）
+ */
 async function fetchMembers(roomId: string): Promise<Member[]> {
   if (memberCache[roomId]) return memberCache[roomId];
+
+  // --- API 版 ---
   const token = await getApiToken();
-  if (!token) return [];
+  if (token) {
+    const [membersRes, meRes] = await Promise.all([
+      chrome.runtime
+        .sendMessage({ type: "fetchMembers", roomId, token })
+        .catch(() => null),
+      myAccountId == null
+        ? chrome.runtime
+            .sendMessage({ type: "fetchMe", token })
+            .catch(() => null)
+        : null,
+    ]);
 
-  const [membersRes, meRes] = await Promise.all([
-    chrome.runtime.sendMessage({ type: "fetchMembers", roomId, token }).catch(() => null),
-    myAccountId == null
-      ? chrome.runtime.sendMessage({ type: "fetchMe", token }).catch(() => null)
-      : null,
-  ]);
+    if (membersRes?.ok) {
+      const members: Member[] = membersRes.members.map(
+        (m: {
+          account_id: number;
+          name: string;
+          chatwork_id?: string;
+          avatar_image_url: string;
+        }) => ({
+          ...m,
+          account_id: String(m.account_id),
+        }),
+      );
 
-  if (!membersRes?.ok) return [];
+      memberCache[roomId] = members;
+      if (meRes?.ok) myAccountId = String(meRes.me.account_id);
+      return members;
+    }
+    // API 失敗時は DOM にフォールバック
+  }
 
-  const members: Member[] = membersRes.members.map(
-    (m: { account_id: number; name: string; chatwork_id?: string; avatar_image_url: string }) => ({
-      ...m,
-      account_id: String(m.account_id),
-    }),
-  );
-  memberCache[roomId] = members;
-  if (meRes?.ok) myAccountId = String(meRes.me.account_id);
-  return members;
+  // --- DOM 版（APIトークン未設定 or API失敗時）---
+  const domMembers = fetchMembersFromDOM();
+  if (domMembers.length > 0) {
+    // DOM 版では自分のアカウントIDが不明なため、除外しない
+    memberCache[roomId] = domMembers;
+    return domMembers;
+  }
+
+  return [];
 }
 
 function getQuery(textarea: HTMLTextAreaElement): string | null {
@@ -65,6 +97,7 @@ function getCaretRect(textarea: HTMLTextAreaElement) {
     white-space:pre-wrap; word-wrap:break-word;
     width:${textarea.clientWidth}px;
   `;
+
   const props = [
     "paddingTop",
     "paddingRight",
@@ -82,21 +115,25 @@ function getCaretRect(textarea: HTMLTextAreaElement) {
     "lineHeight",
     "textTransform",
   ] as const;
+
   for (const p of props) {
     mirror.style.setProperty(
       p.replace(/([A-Z])/g, "-$1").toLowerCase(),
       cs.getPropertyValue(p.replace(/([A-Z])/g, "-$1").toLowerCase()),
     );
   }
+
   mirror.textContent = textarea.value.slice(0, textarea.selectionStart);
   const caret = document.createElement("span");
   caret.textContent = "\u200b";
   mirror.appendChild(caret);
   document.body.appendChild(mirror);
+
   const taRect = textarea.getBoundingClientRect();
   const mirrorRect = mirror.getBoundingClientRect();
   const caretRect = caret.getBoundingClientRect();
   document.body.removeChild(mirror);
+
   return {
     left: taRect.left + (caretRect.left - mirrorRect.left),
     top: taRect.top + (caretRect.top - mirrorRect.top) - textarea.scrollTop,
@@ -141,11 +178,12 @@ function showDropdown(
   query: string,
   textarea: HTMLTextAreaElement,
 ) {
-  // 既存ドロップダウンの位置を保存してから消す
+  // Preserve dropdown position before closing
   if (multiSelectMode && !savedDropdownPos && dropdown) {
     savedDropdownPos = { top: dropdown.style.top, left: dropdown.style.left };
   }
   hideDropdown(false);
+
   const q = query.toLowerCase();
   const filtered = members.filter(
     (m) =>
@@ -154,6 +192,7 @@ function showDropdown(
       (m.name.toLowerCase().includes(q) ||
         (m.chatwork_id ?? "").toLowerCase().includes(q)),
   );
+
   if (filtered.length === 0) {
     if (multiSelectMode) resetMultiSelect();
     return;
@@ -166,7 +205,7 @@ function showDropdown(
   dd.id = "cw-mention-dropdown";
   dropdown = dd;
 
-  // ヒント表示
+  // Display hint
   const hint = document.createElement("div");
   hint.className = "cw-mention-hint";
   hint.textContent = "Shift+クリック / Shift+Enter で複数選択";
@@ -196,7 +235,7 @@ function showDropdown(
   document.body.appendChild(dd);
 
   if (multiSelectMode && savedDropdownPos) {
-    // 複数選択モード中は初回の位置を維持
+    // Maintain position during multi-select
     dd.style.top = savedDropdownPos.top;
     dd.style.left = savedDropdownPos.left;
   } else {
@@ -263,10 +302,10 @@ function insertMention(
     newPos = pos + mention.length;
   }
 
-  // onInputが走らないように抑制
+  // Suppress input event
   suppressInput = true;
 
-  // 現在のドロップダウン位置を保存（再表示時に位置を固定するため）
+  // Preserve dropdown position for re-display
   if (keepOpen && !savedDropdownPos && dropdown) {
     savedDropdownPos = { top: dropdown.style.top, left: dropdown.style.left };
   }
@@ -276,7 +315,6 @@ function insertMention(
   textarea.focus();
 
   suppressInput = false;
-
   sessionSelected.add(member.account_id);
 
   if (keepOpen) {
